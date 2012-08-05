@@ -6,58 +6,80 @@
 // comparator.
 //
 // When the comparator only returns 0 or 1 it is similar to the
-// longest common subsequence problem, see
-// <http://en.wikipedia.org/wiki/Longest_common_subsequence_problem>.
-//
-// When the comparator returns values between 0 and 1 it is similar to
-// finding a shortest path through the decision tree (DAG) where one
-// starts with the two strings and each edge represents a fuzzy match
-// (cost 1 - q) or an insertion/deletion (cost 1).
+// longest common subsequence problem. However, when the comparator
+// returns values between 0 and 1 it is similar to finding a shortest
+// path through the decision tree (DAG) where one starts with the two
+// strings and each edge represents a fuzzy match (cost 1 - q) or an
+// insertion/deletion (cost 1).
 //
 // Returns an array of objects { q: 0..1, a: "...", b: "..." }, where
 // q is the similarity and a/b are the substrings matched. As a
 // convenience, the array object itself also has an accumulated
 // similarity q in the range 0..min(a.length, b.length).
 function fuzzydiff(a, b, cmp) {
-  function append(l, e) {
-    var last = l[l.length - 1];
-    if (last && last.q == e.q) {
-      last.a += e.a;
-      last.b += e.b;
+  var m = a.length;
+  var n = b.length;
+
+  // c represents an m*n DAG of all possible matches between a and b,
+  // in which we find the longest path. Visit each vertex once in
+  // topological order (sweeping diagonal i + j = k), compare the
+  // allowed options (match, insert, remove) and remember the maximum
+  // accumulated q for each vertex. When done, we have an accumulated
+  // q and can easily backtrack to generate the fuzzy diff.
+  var c = new Float64Array(m * n);
+  c.get = function(i, j) { return (i < m && j < n) ? c[i + j * m] : 0; };
+  c.put = function(i, j, x) { c[i + j * m] = x; };
+  var i, j, k; // i + j = k
+  var q, aq; // local and accumulated q
+  for (k = m + n - 2; k >= 0; k--) {
+    if (k < n) {
+      j = k;
+      i = 0;
     } else {
-      l.push(e);
+      j = n - 1;
+      i = k - j;
     }
-    l.q += e.q;
-    return l;
+    while (i < m && j >= 0) {
+      q = cmp(a[i], b[j]); // 0..1
+      aq = q > 0 ? q + c.get(i + 1, j + 1) : 0;
+      aq = Math.max(aq, c.get(i + 1, j), c.get(i, j + 1));
+      c.put(i++, j--, aq);
+    }
   }
 
-  function diff(a, b) {
-    if (a.length == 0 || b.length == 0) {
-      var first = (a.length > 0 || b.length > 0) ? [{ q: 0, a: a, b: b }] : [];
-      first.q = 0;
-      return first;
+  // Generate a fuzzy diff by backtracking.
+  var diff = [];
+  diff.q = c.get(0, 0);
+
+  // Append section x to diff.
+  function append(x) {
+    var last = diff[diff.length - 1];
+    if (last && last.q == x.q) {
+      last.a += x.a;
+      last.b += x.b;
+    } else {
+      diff.push(x);
     }
-
-    var aSub = a.substr(0, a.length - 1);
-    var aLast = a.substr(-1);
-    var bSub = b.substr(0, b.length - 1);
-    var bLast = b.substr(-1);
-
-    // there are 3 options, try them all and pick the best!
-    var qLast = cmp(aLast, bLast);
-    var x = diff(aSub, bSub);
-    var y = diff(a, bSub);
-    var z = diff(aSub, b);
-    var bestYZ = (y.q > z.q) ? y : z;
-
-    if (x.q + qLast > bestYZ.q)
-      return append(x, { q: qLast, a: aLast, b: bLast });
-
-    if (bestYZ == y)
-      return append(y, { q: 0, a: '', b: bLast });
-    else
-      return append(z, { q: 0, a: aLast, b: '' });
   }
 
-  return diff(a, b);
+  // There may be many possible paths, prefer match over deletion over
+  // insertion, since that gives pretty diffs.
+  i = 0;
+  j = 0;
+  while (i < m && j < n) {
+    q = cmp(a[i], b[j]);
+    aq = c.get(i, j);
+    if (q > 0 && aq == q + c.get(i + 1, j + 1)) {
+      append({ q: q, a: a[i++], b: b[j++] });
+    } else if (aq == c.get(i + 1, j)) {
+      append({ q: 0, a: a[i++], b: '' });
+    } else {
+      append({ q: 0, a: '', b: b[j++] });
+    }
+  }
+  if (i < m || j < n) {
+    append({ q: 0, a: a.substr(i), b: b.substr(j) });
+  }
+
+  return diff;
 }

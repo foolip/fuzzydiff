@@ -18,12 +18,12 @@ function assert_diff_equals(actual, expected) {
   assert_equals(actual.length, expected.length);
   var q = 0;
   for (var i = 0; i < actual.length; i++) {
-    assert_equals(actual[i].q, expected[i].q);
-    assert_equals(actual[i].a, expected[i].a);
-    assert_equals(actual[i].b, expected[i].b);
+    assert_equals(actual[i].q, expected[i].q, 'segment.q');
+    assert_equals(actual[i].a, expected[i].a, 'segment.a');
+    assert_equals(actual[i].b, expected[i].b, 'segment.b');
     q += actual[i].q * actual[i].a.length;
   }
-  assert_equals(actual.q, q);
+  assert_equals(actual.q, q, 'accumulated q');
 }
 
 test(function() {
@@ -38,16 +38,14 @@ test(function() {
 
 test(function() {
   var diff = fuzzydiff('zZ', 'Zz', cmp(0.25));
-  assert_diff_equals(diff, [{ q: 0, a: '', b: 'Z' },
-                            { q: 1, a: 'z', b: 'z' },
-                            { q: 0, a: 'Z', b: '' }]);
+  assert_diff_equals(diff, [{ q: 0, a: 'z', b: '' },
+                            { q: 1, a: 'Z', b: 'Z' },
+                            { q: 0, a: '', b: 'z' }]);
 }, 'fuzzy comparator (0.25)');
 
 test(function() {
   var diff = fuzzydiff('zZ', 'Zz', cmp(0.5));
-  assert_diff_equals(diff, [{ q: 0, a: '', b: 'Z' },
-                            { q: 1, a: 'z', b: 'z' },
-                            { q: 0, a: 'Z', b: '' }]);
+  assert_diff_equals(diff, [{ q: 0.5, a: 'zZ', b: 'Zz' }]);
 }, 'fuzzy comparator (0.5)');
 
 test(function() {
@@ -59,7 +57,9 @@ test(function() {
   var diff = fuzzydiff('Hello, hello, world!', 'HELLO WORLD', cmp(0.75));
   assert_diff_equals(diff, [{ q: 1, a: 'H', b: 'H' },
                             { q: 0.75, a: 'ello', b: 'ELLO' },
-                            { q: 0, a: ', hello, ', b: '' },
+                            { q: 0, a: ',', b: '' },
+                            { q: 1, a: ' ', b: ' ' },
+                            { q: 0, a: 'hello, ', b: '' },
                             { q: 0.75, a: 'world', b: 'WORLD' },
                             { q: 0, a: '!', b: '' }]);
 }, 'Hello World');
